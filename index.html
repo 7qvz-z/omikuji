@@ -1,0 +1,628 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>おみくじ</title>
+  <style>
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+
+    body {
+      font-family: "Hiragino Kaku Gothic ProN", "Yu Gothic", "Meiryo", sans-serif;
+      min-height: 100vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      background: linear-gradient(135deg, #f5f0e8, #e8dfd0);
+      transition: background 0.8s ease;
+    }
+
+    /* 結果ごとの背景 */
+    body.daikichi {
+      background: linear-gradient(135deg, #ffd54f, #ff8a65);
+    }
+    body.chukichi {
+      background: linear-gradient(135deg, #a5d6a7, #4db6ac);
+    }
+    body.kichi {
+      background: linear-gradient(135deg, #90caf9, #5c9ce6);
+    }
+    body.shokichi {
+      background: linear-gradient(135deg, #ce93d8, #9575cd);
+    }
+    body.kyo {
+      background: linear-gradient(135deg, #90a4ae, #546e7a);
+    }
+    body.daikyo {
+      background: linear-gradient(135deg, #4a3b5c, #2c2333);
+    }
+
+    .card {
+      background: rgba(255, 255, 255, 0.9);
+      backdrop-filter: blur(8px);
+      border-radius: 24px;
+      box-shadow: 0 16px 48px rgba(0, 0, 0, 0.15);
+      padding: 48px 64px;
+      text-align: center;
+      max-width: 400px;
+      width: 90%;
+    }
+
+    h1 {
+      font-size: 1.6rem;
+      color: #5d4037;
+      margin-bottom: 8px;
+    }
+
+    .subtitle {
+      color: #8d6e63;
+      font-size: 0.9rem;
+      margin-bottom: 32px;
+    }
+
+    /* 演出の舞台。筒と紙を同じ場所に出すため高さを固定してカードのガタつきを防ぐ */
+    .stage {
+      min-height: 250px;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      margin-bottom: 24px;
+    }
+
+    /* おみくじの筒 */
+    .tube {
+      display: none;
+      width: 90px;
+      height: 170px;
+      background: linear-gradient(90deg, #8e0000, #d32f2f 45%, #8e0000);
+      border-radius: 10px 10px 16px 16px;
+      border-top: 10px solid #6d0000;
+      color: #ffe082;
+      font-weight: bold;
+      font-size: 1.3rem;
+      letter-spacing: 0.25em;
+      writing-mode: vertical-rl;
+      align-items: center;
+      justify-content: center;
+      box-shadow: 0 8px 20px rgba(0, 0, 0, 0.25);
+    }
+
+    /* 振れる状態の筒。ドラッグ操作を受け付ける */
+    .tube.shakable {
+      display: flex;
+      cursor: grab;
+      touch-action: none;   /* スマホでドラッグ中に画面がスクロールしないようにする */
+      user-select: none;
+      transition: transform 0.08s ease-out;
+    }
+
+    .tube.shakable:active {
+      cursor: grabbing;
+    }
+
+    /* 振り具合を示すゲージ */
+    .gauge {
+      width: 150px;
+      height: 8px;
+      background: #e0d5c8;
+      border-radius: 999px;
+      overflow: hidden;
+      margin-top: 16px;
+    }
+
+    .gauge-fill {
+      height: 100%;
+      width: 0%;
+      background: linear-gradient(90deg, #ffb300, #d84315);
+      border-radius: 999px;
+      transition: width 0.1s;
+    }
+
+    .hint {
+      margin-top: 10px;
+      font-size: 0.85rem;
+      color: #8d6e63;
+      line-height: 1.6;
+      text-align: center;
+    }
+
+    /* みくじ紙 */
+    .paper {
+      background: #fffdf5;
+      border: 2px solid #d7ccc8;
+      border-radius: 8px;
+      padding: 16px 28px 4px;
+      transform-origin: top center;
+    }
+
+    /* 紙が上から下へ開く動き */
+    .paper.unfold {
+      animation: unfold 0.6s cubic-bezier(0.25, 1.2, 0.5, 1);
+    }
+
+    @keyframes unfold {
+      0% { transform: scaleY(0.05); opacity: 0.3; }
+      60% { transform: scaleY(1.08); opacity: 1; }
+      100% { transform: scaleY(1); }
+    }
+
+    .hidden {
+      display: none;
+    }
+
+    .result-label {
+      font-size: 1rem;
+      font-weight: bold;
+      color: #8d6e63;
+      letter-spacing: 0.2em;
+      min-height: 1.5em;
+    }
+
+    .result {
+      font-size: 4.5rem;
+      font-weight: bold;
+      min-height: 120px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      color: #bcaaa4;
+      transition: color 0.3s;
+    }
+
+    .result.show {
+      animation: pop 0.5s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+    }
+
+    .result.daikichi { color: #e65100; }
+    .result.chukichi { color: #2e7d32; }
+    .result.kichi { color: #1565c0; }
+    .result.shokichi { color: #6a1b9a; }
+    .result.kyo { color: #37474f; }
+    .result.daikyo { color: #311b92; }
+
+    @keyframes pop {
+      0% { transform: scale(0.3); opacity: 0; }
+      70% { transform: scale(1.15); }
+      100% { transform: scale(1); opacity: 1; }
+    }
+
+    .message {
+      font-size: 0.95rem;
+      color: #6d4c41;
+      min-height: 1.5em;
+      margin-bottom: 12px;
+    }
+
+    button {
+      font-family: inherit;
+      font-size: 1.1rem;
+      font-weight: bold;
+      color: #fff;
+      background: linear-gradient(135deg, #d84315, #bf360c);
+      border: none;
+      border-radius: 999px;
+      padding: 16px 48px;
+      cursor: pointer;
+      box-shadow: 0 6px 16px rgba(191, 54, 12, 0.35);
+      transition: transform 0.15s, box-shadow 0.15s;
+    }
+
+    button:hover {
+      transform: translateY(-2px);
+      box-shadow: 0 10px 20px rgba(191, 54, 12, 0.4);
+    }
+
+    button:active {
+      transform: translateY(1px);
+      box-shadow: 0 3px 8px rgba(191, 54, 12, 0.3);
+    }
+
+    button:disabled {
+      opacity: 0.6;
+      cursor: default;
+      transform: none;
+    }
+
+    /* 演出用キャンバス(画面全体を覆うが、クリックは透過させる) */
+    #effectCanvas {
+      position: fixed;
+      inset: 0;
+      width: 100vw;
+      height: 100vh;
+      pointer-events: none;
+      z-index: 10;
+    }
+  </style>
+</head>
+<body>
+  <div class="card">
+    <h1>⛩ おみくじ ⛩</h1>
+    <p class="subtitle">今日の運勢を占ってみましょう</p>
+    <div class="stage">
+      <div class="tube" id="tube">おみくじ</div>
+      <div class="gauge hidden" id="gauge"><div class="gauge-fill" id="gaugeFill"></div></div>
+      <p class="hint hidden" id="hint">筒をつかんで左右に振ろう！スマホは端末シェイクもOK<br>たくさん振るほど良いことがあるかも…？<br><span id="shakeCountText">振った回数:0回</span></p>
+      <div class="paper" id="paper">
+        <p class="result-label" id="resultLabel"></p>
+        <div class="result" id="result">？</div>
+        <p class="message" id="message"></p>
+      </div>
+    </div>
+    <button id="drawBtn">おみくじを引く</button>
+  </div>
+
+  <canvas id="effectCanvas"></canvas>
+
+  <script>
+    // weight は出やすさ(%)。合計が100になるようにする
+    const fortunes = [
+      { name: "大吉", className: "daikichi", weight: 5,  message: "最高の一日になりそう！何をやってもうまくいく予感" },
+      { name: "中吉", className: "chukichi", weight: 30, message: "なかなか良い運勢。コツコツ進めば実を結びます" },
+      { name: "吉",   className: "kichi",    weight: 30, message: "穏やかで安定した一日。いつも通りが一番です" },
+      { name: "小吉", className: "shokichi", weight: 20, message: "小さな幸せが見つかりそう。足元に目を向けて" },
+      { name: "凶",   className: "kyo",      weight: 12, message: "今日は慎重に。無理せずゆっくり過ごしましょう" },
+      { name: "大凶", className: "daikyo",   weight: 3,  message: "今日は充電の日。早めに休んで明日に備えましょう" }
+    ];
+
+    // 大吉が出る確率(%)。振った回数が多いほど上がる
+    // 〜4回:基本の5% / 5〜19回:5%→80%へ徐々に上昇 / 20〜49回:80%→100%へ / 50回以上:確定
+    function daikichiChance(count) {
+      if (count >= 50) return 100;
+      if (count >= 20) return 80 + ((count - 20) / 30) * 20;
+      if (count >= 5)  return 5 + ((count - 5) / 15) * 75;
+      return 5;
+    }
+
+    // 振った回数を反映した抽選。まず大吉かどうかを決め、外れたら残りの運勢を重みで山分けする
+    function drawFortuneWithBonus(count) {
+      const chance = daikichiChance(count);
+      if (Math.random() * 100 < chance) {
+        return fortunes.find((f) => f.className === "daikichi");
+      }
+      const others = fortunes.filter((f) => f.className !== "daikichi");
+      const totalWeight = others.reduce((sum, f) => sum + f.weight, 0);
+      let ticket = Math.random() * totalWeight;
+      for (const fortune of others) {
+        if (ticket < fortune.weight) {
+          return fortune;
+        }
+        ticket -= fortune.weight;
+      }
+      return others[others.length - 1];
+    }
+
+    // ===== 演出(紙吹雪・雨) =====
+    const canvas = document.getElementById("effectCanvas");
+    const ctx = canvas.getContext("2d");
+
+    function resizeCanvas() {
+      canvas.width = window.innerWidth;
+      canvas.height = window.innerHeight;
+    }
+    resizeCanvas();
+    window.addEventListener("resize", resizeCanvas);
+
+    let particles = [];      // 画面上を舞っている粒
+    let effectType = null;   // "confetti" / "rain" / null
+    let rainEndTime = 0;     // 雨を降らせ終える時刻
+    let animationId = null;
+
+    const confettiColors = ["#ff5252", "#ffd740", "#69f0ae", "#40c4ff", "#e040fb", "#ff6e40", "#ffffff"];
+
+    // クラッカー:画面の左下・右下から、半円の弧を描くように扇状に打ち上げる
+    function startConfetti() {
+      effectType = "confetti";
+      particles = [];
+      const launchers = [
+        { x: 0,            y: canvas.height, from: -Math.PI / 2, to: 0 },        // 左下:真上→真横(右)へ扇状
+        { x: canvas.width, y: canvas.height, from: -Math.PI / 2, to: -Math.PI }  // 右下:真上→真横(左)へ扇状
+      ];
+      // 横方向の威力:空気抵抗で減速しても画面の反対側まで届く強さ
+      const power = canvas.width / 22;
+      for (const launcher of launchers) {
+        const count = 1000;
+        for (let i = 0; i < count; i++) {
+          // 扇の範囲(90度)に均等に角度を割り振ることで、飛び出した粒の先端が弧を描く
+          const t = i / (count - 1);
+          const angle = launcher.from + (launcher.to - launcher.from) * t + (Math.random() - 0.5) * 0.12;
+          const speedScale = 0.75 + Math.random() * 0.5;
+          particles.push({
+            x: launcher.x,
+            y: launcher.y,
+            vx: Math.cos(angle) * power * speedScale,
+            vy: Math.sin(angle) * (20 + Math.random() * 6),
+            maxFall: 3.5 + Math.random() * 1.5,   // 落下速度の上限(ゆっくり落ちて約4秒で落ちきる)
+            sway: 0.8 + Math.random() * 1.2,
+            phase: Math.random() * Math.PI * 2,
+            size: 5 + Math.random() * 7,
+            color: confettiColors[Math.floor(Math.random() * confettiColors.length)],
+            rotation: Math.random() * Math.PI * 2,
+            rotationSpeed: (Math.random() - 0.5) * 0.25
+          });
+        }
+      }
+      startLoop();
+    }
+
+    // 雨:数秒間、画面上部から雨粒を降らせ続ける
+    function startRain() {
+      effectType = "rain";
+      particles = [];
+      rainEndTime = performance.now() + 4000;
+      startLoop();
+    }
+
+    function spawnRaindrops() {
+      for (let i = 0; i < 6; i++) {
+        particles.push({
+          x: Math.random() * canvas.width,
+          y: -20,
+          vx: -1.5,
+          vy: 14 + Math.random() * 8,
+          length: 12 + Math.random() * 14,
+          opacity: 0.3 + Math.random() * 0.4
+        });
+      }
+    }
+
+    function stopEffect() {
+      effectType = null;
+      particles = [];
+      if (animationId !== null) {
+        cancelAnimationFrame(animationId);
+        animationId = null;
+      }
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+    }
+
+    function startLoop() {
+      if (animationId === null) {
+        animationId = requestAnimationFrame(update);
+      }
+    }
+
+    function update() {
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+      if (effectType === "rain" && performance.now() < rainEndTime) {
+        spawnRaindrops();
+      }
+
+      for (const p of particles) {
+        if (effectType === "confetti") {
+          p.vx *= 0.96;                                   // 空気抵抗で横の勢いが弱まる
+          p.vy = Math.min(p.vy + 0.25, p.maxFall);        // 重力で減速し、ゆっくり落下に移る
+          p.phase += 0.06;
+          p.x += p.vx + Math.sin(p.phase) * p.sway;       // 勢い+ひらひらとした揺れ
+          p.y += p.vy;
+          p.rotation += p.rotationSpeed;
+
+          ctx.save();
+          ctx.translate(p.x, p.y);
+          ctx.rotate(p.rotation);
+          ctx.fillStyle = p.color;
+          ctx.fillRect(-p.size / 2, -p.size / 2, p.size, p.size * 0.6);
+          ctx.restore();
+        } else if (effectType === "rain") {
+          p.x += p.vx;
+          p.y += p.vy;
+
+          ctx.strokeStyle = `rgba(174, 214, 241, ${p.opacity})`;
+          ctx.lineWidth = 1.5;
+          ctx.beginPath();
+          ctx.moveTo(p.x, p.y);
+          ctx.lineTo(p.x + p.vx, p.y + p.length);
+          ctx.stroke();
+        }
+      }
+
+      // 画面外に出た粒を取り除く
+      particles = particles.filter(p => p.y < canvas.height + 40);
+
+      if (particles.length > 0 || (effectType === "rain" && performance.now() < rainEndTime)) {
+        animationId = requestAnimationFrame(update);
+      } else {
+        stopEffect();
+      }
+    }
+
+    // ===== 効果音 =====
+    const fanfareSound = new Audio("fanfare.mp3");   // 大吉用
+    const rainSound = new Audio("rain.mp3");         // 大凶用
+    const shakeSound = new Audio("shake.mp4");       // 筒を振る音(mp4の音声部分を再生)
+    fanfareSound.volume = 0.7;  // 音量70%(0.0〜1.0で指定)
+    rainSound.volume = 0.7;
+    shakeSound.volume = 0.7;
+
+    function stopSounds() {
+      for (const sound of [fanfareSound, rainSound, shakeSound]) {
+        sound.pause();
+        sound.currentTime = 0;  // 次回のために先頭に巻き戻しておく
+      }
+    }
+
+    // ===== 画面の更新 =====
+    const tubeEl = document.getElementById("tube");
+    const gaugeEl = document.getElementById("gauge");
+    const gaugeFillEl = document.getElementById("gaugeFill");
+    const hintEl = document.getElementById("hint");
+    const paperEl = document.getElementById("paper");
+    const resultLabelEl = document.getElementById("resultLabel");
+    const resultEl = document.getElementById("result");
+    const messageEl = document.getElementById("message");
+    const drawBtn = document.getElementById("drawBtn");
+
+    // ===== 筒を自分で振るインタラクション =====
+    const shakeCountEl = document.getElementById("shakeCountText");
+    let isShaking = false;   // 「振り待ち」状態かどうか
+    let shakeCount = 0;      // 振った回数
+    const SHAKE_MAX = 50;    // ゲージが満タンになる回数(=大吉確定ライン)
+
+    // ボタンは2役:待機中は「おみくじを引く」、振っている間は「結果を見る」
+    drawBtn.addEventListener("click", () => {
+      if (isShaking) {
+        revealResult();
+        return;
+      }
+
+      // 前の音・演出はボタンが押された時点ですぐ止める
+      stopSounds();
+      stopEffect();
+
+      isShaking = true;
+      shakeCount = 0;
+      gaugeFillEl.style.width = "0%";
+      shakeCountEl.textContent = "振った回数:0回";
+
+      paperEl.classList.add("hidden");
+      document.body.className = "";
+      tubeEl.classList.add("shakable");
+      gaugeEl.classList.remove("hidden");
+      hintEl.classList.remove("hidden");
+      drawBtn.textContent = "結果を見る";
+
+      enableMotionShake();  // モバイルの「端末を振る」を有効化(iOSはここで許可を求める)
+    });
+
+    // 「1回振った」と数える
+    function registerShake() {
+      if (!isShaking) return;
+      shakeCount++;
+      gaugeFillEl.style.width = Math.min(100, (shakeCount / SHAKE_MAX) * 100) + "%";
+      shakeCountEl.textContent = `振った回数:${shakeCount}回`;
+
+      // 振っている間だけシャカシャカ音を鳴らす(鳴り終わっていたらもう一度)
+      if (shakeSound.paused) {
+        shakeSound.currentTime = 0;
+        shakeSound.play();
+      }
+    }
+
+    // 【2段階目】みくじ紙がスルスルと開いて結果が現れる
+    function revealResult() {
+      const fortune = drawFortuneWithBonus(shakeCount);  // 振った回数が多いほど大吉が出やすい
+      isShaking = false;
+      dragging = false;
+
+      shakeSound.pause();
+      shakeSound.currentTime = 0;
+
+      tubeEl.classList.remove("shakable");
+      tubeEl.style.transform = "";
+      gaugeEl.classList.add("hidden");
+      hintEl.classList.add("hidden");
+
+      resultEl.classList.remove("show", "daikichi", "chukichi", "kichi", "shokichi", "kyo", "daikyo");
+      resultLabelEl.textContent = "今日の運勢";
+      resultEl.textContent = fortune.name;
+      resultEl.classList.add("show", fortune.className);
+      messageEl.textContent = fortune.message;
+
+      paperEl.classList.remove("hidden", "unfold");
+      void paperEl.offsetWidth;
+      paperEl.classList.add("unfold");
+
+      document.body.className = fortune.className;
+
+      // 大吉はクラッカー+ファンファーレ、大凶は雨+豪雨の音
+      if (fortune.className === "daikichi") {
+        startConfetti();
+        fanfareSound.play();
+      } else if (fortune.className === "daikyo") {
+        startRain();
+        rainSound.play();
+      }
+
+      drawBtn.textContent = "おみくじを引く";
+    }
+
+    // --- PC:クリックしたまま左右に動かす / モバイル:タップしたまま左右に動かす ---
+    // Pointer Events を使うとマウスとタッチを同じコードで扱える
+    let dragging = false;
+    let lastX = 0;
+    let dragStartX = 0;
+    let lastDirection = 0;  // 直前に動いていた向き(-1:左 / 1:右)
+
+    tubeEl.addEventListener("pointerdown", (e) => {
+      if (!isShaking) return;
+      dragging = true;
+      lastX = e.clientX;
+      dragStartX = e.clientX;
+      lastDirection = 0;
+      tubeEl.setPointerCapture(e.pointerId);  // 筒の外にはみ出してもドラッグを追跡する
+    });
+
+    tubeEl.addEventListener("pointermove", (e) => {
+      if (!dragging || !isShaking) return;
+      const dx = e.clientX - lastX;
+      lastX = e.clientX;
+
+      // 動く向きが反転した瞬間を「1回振った」と数える
+      if (Math.abs(dx) > 2) {
+        const direction = Math.sign(dx);
+        if (lastDirection !== 0 && direction !== lastDirection) {
+          registerShake();
+        }
+        lastDirection = direction;
+      }
+
+      // 見た目:ドラッグ位置に応じて筒を傾ける(最大±25度)
+      const tilt = Math.max(-25, Math.min(25, (e.clientX - dragStartX) * 0.25));
+      tubeEl.style.transform = `rotate(${tilt}deg)`;
+    });
+
+    function endDrag() {
+      dragging = false;
+      tubeEl.style.transform = "";  // 手を離したら筒がまっすぐに戻る
+    }
+    tubeEl.addEventListener("pointerup", endDrag);
+    tubeEl.addEventListener("pointercancel", endDrag);
+
+    // --- モバイル:端末そのものを振る(加速度センサー) ---
+    let motionListening = false;
+
+    function enableMotionShake() {
+      if (motionListening) return;
+      if (typeof DeviceMotionEvent === "undefined") return;  // センサーのない環境(PCなど)
+
+      if (typeof DeviceMotionEvent.requestPermission === "function") {
+        // iOSではユーザー操作のタイミングでセンサー使用の許可を求める必要がある
+        DeviceMotionEvent.requestPermission()
+          .then((state) => {
+            if (state === "granted") {
+              window.addEventListener("devicemotion", onDeviceMotion);
+              motionListening = true;
+            }
+          })
+          .catch(() => {});
+      } else {
+        window.addEventListener("devicemotion", onDeviceMotion);
+        motionListening = true;
+      }
+    }
+
+    let lastMotionTime = 0;  // 連続するセンサーイベントを1回の「振り」にまとめるためのクールタイム
+
+    function onDeviceMotion(e) {
+      if (!isShaking) return;
+      const a = e.acceleration;
+      if (!a || a.x === null) return;
+
+      // 3方向の加速度の合計が大きい=しっかり振っている
+      const strength = Math.abs(a.x) + Math.abs(a.y) + Math.abs(a.z);
+      const now = performance.now();
+      if (strength > 15 && now - lastMotionTime > 250) {
+        lastMotionTime = now;
+        registerShake();
+        // 見た目もランダムに揺らす
+        tubeEl.style.transform = `rotate(${(Math.random() - 0.5) * 40}deg)`;
+      }
+    }
+  </script>
+</body>
+</html>
